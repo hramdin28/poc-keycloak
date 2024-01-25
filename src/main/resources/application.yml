@@ -1,0 +1,126 @@
+---
+app:
+  name: APP-BACK-END
+  description: App API rest
+
+server:
+  port: 8083
+
+db:
+  name: poc
+  url: jdbc:postgresql://localhost:5432/${db.name}
+  driverClassName: org.postgresql.Driver
+  schema: app_portal_int
+  keycloak-schema: auth_int
+  username: admin
+  password: admin
+
+spring:
+  datasource:
+    url: ${db.url}
+    driverClassName: ${db.driverClassName}
+    username: ${db.username}
+    password: ${db.password}
+    hikari:
+      schema: ${db.schema}
+  jpa:
+    open-in-view: false
+    show-sql: true
+    properties:
+      hibernate:
+        default_schema: ${db.schema}
+        format_sql: true
+  flyway:
+    url: ${db.url}
+    default-schema: ${db.schema}
+    user: ${db.username}
+    password: ${db.password}
+    locations: classpath:db/migration
+    out-of-order: true
+    baseline-on-migrate: true
+    create-schemas: true
+    placeholders:
+      app-schema: ${db.schema}
+      keycloak-schema: ${db.keycloak-schema}
+    schemas: ${db.schema}, ${db.keycloak-schema}
+
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: ${keycloak.server.realm.realmAppClientId}
+            client-secret: ${keycloak.server.realm.realmAppClientSecret}
+            authorization-grant-type: authorization_code
+            redirect-uri: 'http://localhost:4200/'
+            scope:
+              - openid
+        provider:
+          keycloak:
+            authorization-uri: ${oauth.connection.authUri}
+            token-uri: ${oauth.connection.tokenUri}
+            jwk-set-uri: ${oauth.connection.jwksUri}
+
+keycloak:
+  datasource:
+    url: ${db.url}?currentSchema=${db.keycloak-schema}
+    driverClassName: ${db.driverClassName}
+    username: ${db.username}
+    password: ${db.password}
+  server:
+    contextPath: /oauth
+    themeDir: src/main/resources/themes
+    adminUser:
+      username: admin
+      password: pwd
+    realm:
+      realmImportFile: realm-export.json
+      realmName: APP_LOCAL
+      realmAppClientId: APP_LOCAL_CLIENT
+      realmAppClientSecret: appLocalSecret
+
+oauth:
+  connection:
+    issuerUri: http://localhost:${server.port}${keycloak.server.contextPath}/realms/${keycloak.server.realm.realmName}
+    authUri: ${oauth.connection.issuerUri}/protocol/openid-connect/auth
+    jwksUri: ${oauth.connection.issuerUri}/protocol/openid-connect/certs
+    tokenUri: ${oauth.connection.issuerUri}/protocol/openid-connect/token
+    logoutUri: ${oauth.connection.issuerUri}/protocol/openid-connect/logout
+  token:
+    idTokenKey: id_token
+    accessTokenKey: access_token
+    accessTokenMaxLifeSecondsKey: expires_in
+    refreshTokenKey: refresh_token
+    refreshTokenMaxLifeSecondsKey: refresh_expires_in
+    authoritiesClaimName: groups
+    authorityRolePrefix: APP_
+  cookie:
+    name: app_custom_cookie_
+    domain: localhost
+    secure: false
+    path: /
+    sameSite: Lax
+
+logging:
+  level:
+    root: info
+    org:
+      springframework:
+        security: info
+
+
+management:
+  endpoints:
+    web:
+      base-path: /management
+      exposure:
+        include:
+          - mappings
+          - configprops
+          - env
+          - health
+          - info
+          - threaddump
+          - logfile
+          - metrics
+          - prometheus

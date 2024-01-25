@@ -1,0 +1,77 @@
+server:
+  port: 8083
+
+db:
+  name: poc
+  url: jdbc:h2:mem:${db.name};DB_CLOSE_ON_EXIT=FALSE
+  driverClassName: org.h2.Driver
+  schema: app_portal_int
+  keycloak-schema: auth-int
+  username: admin
+  password: admin
+
+spring:
+  profiles:
+    active: test
+  datasource:
+    url: ${db.url}
+    driverClassName: ${db.driverClassName}
+    username: ${db.username}
+    password: ${db.password}
+  jpa:
+    open-in-view: false
+    show-sql: true
+    properties:
+      hibernate:
+        default_schema: ${db.schema}
+        format_sql: true
+  flyway:
+    url: ${db.url}
+    user: ${db.username}
+    password: ${db.password}
+    locations: classpath:db/migration
+    out-of-order: true
+    baseline-on-migrate: true
+
+keycloak:
+  datasource:
+    url: ${db.url}?currentSchema=${db.keycloak-schema}
+    driverClassName: ${db.driverClassName}
+    username: ${db.username}
+    password: ${db.password}
+  server:
+    contextPath: /oauth
+    themeDir: src/main/resources/themes
+    adminUser:
+      username: admin
+      password: pwd
+    realm:
+      realmImportFile: realm-export.json
+      realmName: APP_LOCAL
+      realmAppClientId: APP_LOCAL_CLIENT
+      realmAppClientSecret: appLocalSecret
+
+oauth:
+  connection:
+    issuerUri: http://localhost:${server.port}${keycloak.server.contextPath}/realms/${keycloak.server.realm.realmName}
+    authUri: ${oauth.connection.issuerUri}/protocol/openid-connect/auth
+    jwksUri: ${oauth.connection.issuerUri}/protocol/openid-connect/certs
+    tokenUri: ${oauth.connection.issuerUri}/protocol/openid-connect/token
+    logoutUri: ${oauth.connection.issuerUri}/protocol/openid-connect/logout
+  token:
+    idTokenKey: id_token
+    accessTokenKey: access_token
+    accessTokenMaxLifeSecondsKey: expires_in
+    refreshTokenKey: refresh_token
+    refreshTokenMaxLifeSecondsKey: refresh_expires_in
+    authoritiesClaimName: groups
+    authorityRolePrefix: APP_
+  cookie:
+    domain: localhost
+    secure: false
+    path: /
+    sameSite: Lax
+
+logging:
+  level:
+    root: info
