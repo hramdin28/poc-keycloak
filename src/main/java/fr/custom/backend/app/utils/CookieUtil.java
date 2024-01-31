@@ -1,5 +1,6 @@
 package fr.custom.backend.app.utils;
 
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
@@ -41,14 +42,19 @@ public class CookieUtil {
     public static void deleteCookie(
           HttpServletRequest request,
           HttpServletResponse response,
-          String name) {
+          String name,
+          String path) {
 
         getCookie(request, name)
-              .ifPresent(cookie -> {
-                  cookie.setValue(StringUtils.EMPTY);
-                  cookie.setMaxAge(0);
-                  response.addCookie(cookie);
-              });
+              .ifPresent(cookie ->
+                    addCookie(
+                          response,
+                          name,
+                          StringUtils.EMPTY,
+                          0,
+                          path,
+                          true)
+              );
     }
 
     public static String base64Encode(Object object) {
