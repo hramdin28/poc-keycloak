@@ -43,4 +43,13 @@ public class AuthController {
 
         return authenticationComponent.refreshTokens(registrationId, request, response);
     }
+
+    @ApiResponse(responseCode = "200", description = "Logout token")
+    @PostMapping(path = "logout")
+    public void logout(
+          @RequestParam String registrationId,
+          HttpServletRequest request,
+          HttpServletResponse response) {
+        authenticationComponent.logout(request, response, registrationId);
+    }
 }
