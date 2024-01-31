@@ -1,12 +1,18 @@
 package fr.custom.backend.app.security;
 
+import static fr.aefe.scola.app.security.constants.AuthConstants.CODE_KEY;
+import static fr.aefe.scola.app.security.constants.AuthConstants.CODE_VERIFIER_KEY;
+import static fr.aefe.scola.app.security.constants.AuthConstants.GRANT_TYPE_AUTHORIZATION_CODE;
+import static fr.aefe.scola.app.security.constants.AuthConstants.GRANT_TYPE_KEY;
+import static fr.aefe.scola.app.security.constants.AuthConstants.GRANT_TYPE_REFRESH_TOKEN;
+import static fr.aefe.scola.app.security.constants.AuthConstants.REDIRECT_URI_KEY;
 import com.fasterxml.jackson.databind.JsonNode;
-import fr.custom.backend.app.properties.OauthProperties;
-import fr.custom.backend.app.security.constants.AuthConstants;
-import fr.custom.backend.app.security.model.AuthenticationResponse;
-import fr.custom.backend.app.utils.CookieUtil;
+import fr.aefe.scola.app.properties.OauthProperties;
+import fr.aefe.scola.app.security.model.AuthenticationResponse;
+import fr.aefe.scola.app.utils.CookieUtil;
 import io.netty.handler.logging.LogLevel;
 import io.netty.resolver.DefaultAddressResolverGroup;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Optional;
@@ -33,6 +39,7 @@ public class AuthenticationComponent {
     private final ClientRegistrationRepository clientRegistrationRepository;
     private final OauthProperties oauthProperties;
     private static final String WIRETAP_PROPERTY = "reactor.netty.http.client.HttpClient";
+    private static final String NO_CONTENT = "NO CONTENT";
 
     public AuthenticationResponse getOauthTokens(
           String registrationId,
@@ -54,10 +61,11 @@ public class AuthenticationComponent {
           HttpServletResponse response) {
         var registration = clientRegistrationRepository.findByRegistrationId(registrationId);
 
-        var refreshTokenKey = oauthProperties.getCookie().getName() + oauthProperties.getToken()
-              .getRefreshTokenKey();
+        var refreshTokenCookieName =
+              oauthProperties.getCookie().getName() + oauthProperties.getToken()
+                    .getRefreshTokenKey();
 
-        var cookie = CookieUtil.getCookie(request, refreshTokenKey)
+        var cookie = CookieUtil.getCookie(request, refreshTokenCookieName)
               .orElseThrow();
 
         var cookieValue = CookieUtil.base64Decode(cookie.getValue());
@@ -76,6 +84,31 @@ public class AuthenticationComponent {
             generateAccessTokenCookie(response, authResponse);
             generateRefreshTokenCookie(response, authResponse);
         }
+    }
+
+    public void logout(HttpServletRequest request, HttpServletResponse response,
+          String registrationId) {
+
+        var accessTokenCookieName =
+              oauthProperties.getCookie().getName() + oauthProperties.getToken()
+                    .getAccessTokenKey();
+
+        var refreshTokenCookieName =
+              oauthProperties.getCookie().getName() + oauthProperties.getToken()
+                    .getRefreshTokenKey();
+
+        var cookieValue = CookieUtil.getCookie(request, refreshTokenCookieName)
+              .map(Cookie::getValue)
+              .orElseThrow();
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add(oauthProperties.getToken().getRefreshTokenKey(),
+              CookieUtil.base64Decode(cookieValue));
+
+        logOutRequest(formData, registrationId);
+
+        clearCookies(request, response, accessTokenCookieName, refreshTokenCookieName,
+              oauthProperties.getCookie().getPath());
     }
 
     private void generateAccessTokenCookie(HttpServletResponse response, JsonNode authResponse) {
@@ -162,6 +195,18 @@ public class AuthenticationComponent {
         return ssoIssuerRequest(registration, parameters);
     }
 
+    private void logOutRequest(MultiValueMap<String, String> parameters, String registrationId) {
+        var registration = clientRegistrationRepository.findByRegistrationId(registrationId);
+        webClient(registration).post()
+              .uri(oauthProperties.getConnection().getLogoutUri())
+              .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+              .body(BodyInserters.fromFormData(parameters))
+              .retrieve()
+              .bodyToMono(String.class)
+              .defaultIfEmpty(NO_CONTENT)
+              .block();
+    }
+
     private WebClient webClient(ClientRegistration registration) {
         var httpClient = HttpClient
               .create()
@@ -204,19 +249,27 @@ public class AuthenticationComponent {
           String codeVerifier) {
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add(AuthConstants.GRANT_TYPE_KEY, AuthConstants.GRANT_TYPE_AUTHORIZATION_CODE);
-        formData.add(AuthConstants.CODE_KEY, code);
-        formData.add(AuthConstants.REDIRECT_URI_KEY, redirectUri);
+        formData.add(GRANT_TYPE_KEY, GRANT_TYPE_AUTHORIZATION_CODE);
+        formData.add(CODE_KEY, code);
+        formData.add(REDIRECT_URI_KEY, redirectUri);
         if (codeVerifier != null) {
-            formData.add(AuthConstants.CODE_VERIFIER_KEY, codeVerifier);
+            formData.add(CODE_VERIFIER_KEY, codeVerifier);
         }
         return formData;
     }
 
     private MultiValueMap<String, String> refreshTokenParameters(String refreshToken) {
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add(AuthConstants.GRANT_TYPE_KEY, AuthConstants.GRANT_TYPE_REFRESH_TOKEN);
-        formData.add(AuthConstants.GRANT_TYPE_REFRESH_TOKEN, refreshToken);
+        formData.add(GRANT_TYPE_KEY, GRANT_TYPE_REFRESH_TOKEN);
+        formData.add(GRANT_TYPE_REFRESH_TOKEN, refreshToken);
         return formData;
+    }
+
+    private void clearCookies(HttpServletRequest request, HttpServletResponse response,
+          String accessTokenCookieName, String refreshTokenCookieName, String path) {
+        CookieUtil.deleteCookie(request, response, accessTokenCookieName,
+              path);
+        CookieUtil.deleteCookie(request, response, refreshTokenCookieName,
+              path);
     }
 }
